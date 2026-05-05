@@ -11,10 +11,10 @@ on:
         required: true
       role_assignments:
         description: "JSON array of role assignments (roleDefinitionId, principalId, principalType)"
-        required: true
+        required: false
       subnet_id:
         description: "Subnet ID for Virtual Network rules"
-        required: true
+        required: false
       resource_group:
         description: "Name of the resource group to create/use"
         required: true
