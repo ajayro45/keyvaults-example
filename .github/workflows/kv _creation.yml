@@ -1,4 +1,4 @@
-name: Keyvault Creation 
+name: Create Key Vaults with Multiple Role Assignments
 
 on:
   workflow_dispatch:
@@ -11,10 +11,16 @@ on:
         required: true
       role_assignments:
         description: "JSON array of role assignments (roleDefinitionId, principalId, principalType)"
-        required: false
+        required: true
       subnet_id:
         description: "Subnet ID for Virtual Network rules"
-        required: false
+        required: true
+      resource_group:
+        description: "Name of the resource group to create/use"
+        required: true
+      location:
+        description: "Azure region (location) for resources"
+        required: true
 
 jobs:
   create-keyvaults:
@@ -22,7 +28,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v3
 
     - name: Login to Azure
       uses: azure/login@v1
@@ -33,14 +39,19 @@ jobs:
       run: |
         az account set --subscription "${{ inputs.subscription_id }}"
 
+    - name: Create Resource Group
+      run: |
+        az group create --name "${{ inputs.resource_group }}" --location "${{ inputs.location }}"
+
     - name: Create Key Vaults
       run: |
         IFS=',' read -ra KV_NAMES <<< "${{ inputs.keyvault_names }}"
         for kv_name in "${KV_NAMES[@]}"; do
-          az keyvault create --name "$kv_name" --resource-group "YourResourceGroup" --location "YourLocation"
+          az keyvault create --name "$kv_name" --resource-group "${{ inputs.resource_group }}" --location "${{ inputs.location }}"
         done
 
     - name: Assign Roles to Key Vaults
+      continue-on-error: true
       run: |
         IFS=',' read -ra KV_NAMES <<< "${{ inputs.keyvault_names }}"
         ROLE_ASSIGNMENTS=${{ inputs.role_assignments }}
@@ -51,14 +62,15 @@ jobs:
             PRINCIPAL_TYPE=$(echo $role | jq -r '.principalType')
             az role assignment create --role "$ROLE_DEFINITION_ID" \
               --assignee "$PRINCIPAL_ID" \
-              --scope "/subscriptions/${{ inputs.subscription_id }}/resourceGroups/YourResourceGroup/providers/Microsoft.KeyVault/vaults/$kv_name"
+              --scope "/subscriptions/${{ inputs.subscription_id }}/resourceGroups/${{ inputs.resource_group }}/providers/Microsoft.KeyVault/vaults/$kv_name"
           done
         done
 
     - name: Configure Network ACLs
+      continue-on-error: true
       run: |
         IFS=',' read -ra KV_NAMES <<< "${{ inputs.keyvault_names }}"
         for kv_name in "${KV_NAMES[@]}"; do
-          az keyvault network-rule add --name "$kv_name" --resource-group "YourResourceGroup" \
+          az keyvault network-rule add --name "$kv_name" --resource-group "${{ inputs.resource_group }}" \
             --vnet-name "YourVirtualNetworkName" --subnet "${{ inputs.subnet_id }}"
         done
